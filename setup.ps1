@@ -1,6 +1,11 @@
-$vbs = "$PSScriptRoot\run_hidden.vbs"
+$projectDir = $PSScriptRoot
+$vbs = "$projectDir\run_hidden.vbs"
 
-schtasks /create /tn "PaybackCoupons_01" /tr "wscript.exe `"$vbs`"" /sc daily /st 01:00 /ru $env:USERNAME /f
-schtasks /create /tn "PaybackCoupons_13" /tr "wscript.exe `"$vbs`"" /sc daily /st 13:00 /ru $env:USERNAME /f
-
-Write-Host "Tasks created."
+foreach ($hour in @("01:00", "13:00")) {
+    $taskName = "PaybackCoupons_$($hour.Replace(':', ''))"
+    $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`"" -WorkingDirectory $projectDir
+    $trigger = New-ScheduledTaskTrigger -Daily -At $hour
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Limited -Force | Out-Null
+    Write-Host "Task '$taskName' created."
+}
