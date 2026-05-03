@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($content = Get-Content \"C:\\\\Users\\\\iphar\\\\Documents\\\\PaybackCouponActivation\\\\payback.log\" -Raw; $lines = $content -split \"`n\"; $total = $lines.Count; Write-Host \"Total lines: $total\"; $lines | Select-String \"^[^[2m]\" | Select-String \"Start \\\\\\(|Fertig|Aktiviert gesamt|FATAL|WARNUNG|Safety-Limit|Session|Nicht eingeloggt\" | Select-Object -Last 60)",
+      "PowerShell($lines = Get-Content \"C:\\\\Users\\\\iphar\\\\Documents\\\\PaybackCouponActivation\\\\payback.log\"; $lines | Where-Object { $_ -match \"Start \\\\\\(|Fertig|Aktiviert gesamt|FATAL|WARNUNG|Safety-Limit|Session|Nicht eingeloggt|Headline Count|Aktivierbare Buttons zu Beginn|Recovery fehlgeschlagen|no progress|kein Fortschritt\" })",
+      "PowerShell(cmd /c dir /a \"C:\\\\Users\\\\iphar\\\\Documents\\\\PaybackCouponActivation\")"
+    ]
+  }
+}
