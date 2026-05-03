@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -70,6 +71,45 @@ const path = require('path');
 
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Shows a Windows notification.
+     * - persistent=false: toast via PowerShell WinRT (auto-dismiss, stays in Action Center).
+     * - persistent=true: mshta msgbox dialog (stays on screen until the user clicks OK).
+     * @param {string} title - Notification title.
+     * @param {string} message - Notification body.
+     * @param {boolean} persistent - true = modal dialog (stays until dismissed).
+     */
+    function showWindowsToast(title, message, persistent = false) {
+        const xmlEscape = str => str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+
+        // persistent=true: scenario="alarm" with dismiss button — stays on screen until the user clicks OK.
+        // persistent=false: default toast (~7s auto-dismiss, stays in Action Center).
+        const toastXml = persistent
+            ? `<toast scenario="alarm"><visual><binding template="ToastGeneric"><text>${xmlEscape(title)}</text><text>${xmlEscape(message)}</text></binding></visual><audio silent="true"/><actions><action content="OK" arguments="dismiss" activationType="system"/></actions></toast>`
+            : `<toast><visual><binding template="ToastGeneric"><text>${xmlEscape(title)}</text><text>${xmlEscape(message)}</text></binding></visual></toast>`;
+        const script = `
+$r = "HKCU:\\SOFTWARE\\Classes\\AppUserModelId\\PaybackCouponActivation"
+if (-not (Test-Path $r)) { New-Item $r -Force | Out-Null; Set-ItemProperty $r DisplayName "Payback Coupon Activation"; Set-ItemProperty $r ShowInSettings 1 -Type DWord }
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+$xml.LoadXml('${toastXml}')
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("PaybackCouponActivation").Show((New-Object Windows.UI.Notifications.ToastNotification($xml)))
+`;
+        const encoded = Buffer.from(script, 'utf16le').toString('base64');
+        const proc = spawn(
+            'powershell',
+            ['-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
+            { detached: true, stdio: 'ignore', windowsHide: true }
+        );
+        proc.unref();
     }
 
     async function setWindowState(page, state) {
@@ -459,6 +499,7 @@ const path = require('path');
 
         if (await isOnLoginPage(page)) {
             log('Not logged in. Please run once with --login.');
+            showWindowsToast('Payback: Login erforderlich', 'Nicht eingeloggt. Bitte einmal mit --login starten.', true);
             await takeScreenshot(page, 'not-logged-in');
             await context.close();
             return;
@@ -466,6 +507,7 @@ const path = require('path');
 
         if (!(await isCouponPageLoaded(page))) {
             log('Coupon page did not load as expected.');
+            showWindowsToast('Payback: Fehler', 'Coupon-Seite nicht geladen. Screenshot gespeichert.', true);
             await takeScreenshot(page, 'coupon-page-not-ready');
             await context.close();
             return;
@@ -481,6 +523,7 @@ const path = require('path');
 
         if (buttonStart === 0) {
             log('No inactive coupons found.');
+            showWindowsToast('Payback', 'Keine inaktiven Coupons gefunden.');
             await context.close();
             log('Done');
             return;
@@ -497,6 +540,9 @@ const path = require('path');
 
         if (buttonEnd > 0) {
             log('WARNING: There are still activatable buttons remaining.');
+            showWindowsToast('Payback: Warnung', `${activated} aktiviert, noch ${buttonEnd} nicht aktivierbar.`, true);
+        } else {
+            showWindowsToast('Payback', `${activated} Coupon(s) aktiviert.`);
         }
 
         await sleep(1500);
@@ -504,6 +550,7 @@ const path = require('path');
         log('Done');
     } catch (err) {
         log(`FATAL: ${err.message}`);
+        showWindowsToast('Payback: Fataler Fehler', err.message, true);
 
         if (page) {
             await takeScreenshot(page, 'fatal');

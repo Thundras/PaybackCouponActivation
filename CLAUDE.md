@@ -23,20 +23,27 @@ Lead (you) ←→ architect ←→ developer ←→ tester ←→ reviewer
 ### Spawning a Coordinated Team
 
 ```javascript
-// ALL agents in ONE message, each knows WHO to message next
-Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
-  subagent_type: "researcher", name: "researcher", run_in_background: true })
-Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
-  subagent_type: "system-architect", name: "architect", run_in_background: true })
-Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
-  subagent_type: "coder", name: "coder", run_in_background: true })
-Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
-  subagent_type: "tester", name: "tester", run_in_background: true })
-Agent({ prompt: "Wait for 'tester'. Review code quality and security.",
-  subagent_type: "reviewer", name: "reviewer", run_in_background: true })
+// STEP 1: Create the team first — required for SendMessage to work
+TeamCreate({ team_name: "my-team", description: "Task description" })
 
-// Kick off the pipeline
+// STEP 2: Spawn ALL agents in ONE message — every agent needs team_name
+Agent({ prompt: "Research the codebase. SendMessage findings to 'architect'.",
+  subagent_type: "researcher", name: "researcher", team_name: "my-team", run_in_background: true })
+Agent({ prompt: "Wait for 'researcher'. Design solution. SendMessage to 'coder'.",
+  subagent_type: "system-architect", name: "architect", team_name: "my-team", run_in_background: true })
+Agent({ prompt: "Wait for 'architect'. Implement it. SendMessage to 'tester'.",
+  subagent_type: "coder", name: "coder", team_name: "my-team", run_in_background: true })
+Agent({ prompt: "Wait for 'coder'. Write tests. SendMessage results to 'reviewer'.",
+  subagent_type: "tester", name: "tester", team_name: "my-team", run_in_background: true })
+Agent({ prompt: "Wait for 'tester'. Review code quality and security. SendMessage results to 'team-lead'.",
+  subagent_type: "reviewer", name: "reviewer", team_name: "my-team", run_in_background: true })
+
+// STEP 3: Kick off the pipeline
 SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
+
+// STEP 4: When all agents are done — shutdown gracefully, then delete team
+SendMessage({ to: "agent-name", summary: "Shutdown", message: { type: "shutdown_request" } })
+TeamDelete()
 ```
 
 ### Patterns
@@ -49,11 +56,14 @@ SendMessage({ to: "researcher", summary: "Start", message: "[task context]" })
 
 ### Rules
 
+- ALWAYS call `TeamCreate` before spawning agents — without it, `SendMessage` cannot route
+- ALWAYS set `team_name` on every `Agent()` call — agents without it cannot receive messages
 - ALWAYS name agents — `name: "role"` makes them addressable
 - ALWAYS include comms instructions in prompts — who to message, what to send
 - Spawn ALL agents in ONE message with `run_in_background: true`
 - After spawning: STOP, tell user what's running, wait for results
 - NEVER poll status — agents message back or complete automatically
+- ALWAYS shutdown agents with `shutdown_request` before calling `TeamDelete`
 
 ## Swarm & Routing
 

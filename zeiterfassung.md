@@ -5,9 +5,14 @@
 | Phase      | Start | Ende  | Dauer |
 |------------|-------|-------|-------|
 | Konzept    | 02:34 | 02:46 | 0.5h  |
-| Umsetzung  | 02:46 | 06:07 | 3.5h  |
+| Umsetzung  | 02:46 | 06:12 | 3.5h  |
 
-**Gesamt: 4.0h** *(3h33min gemessen)*
+| Konzept    | 11:51 | 12:10 | 0.5h  |
+| Umsetzung  | 12:10 | 12:34 | 0.5h  |
+
+**Gesamt: 5.0h**
+
+**▶ Aktiv seit 11:51**
 
 ### Was wurde gemacht
 - Ruflo-Projektinitialisierung (init, memory, swarm)
@@ -24,3 +29,7 @@
 - Alle Log-Meldungen auf Englisch übersetzt
 - GitHub Wiki mit 5 Seiten erstellt
 - Repo von Ruflo-Boilerplate bereinigt (.gitignore erweitert)
+- Native Agent Teams (TeamCreate + SendMessage) End-to-End getestet — funktioniert
+- CLAUDE.md Swarm-Pattern korrigiert (team_name war fehlend)
+- Claude-Flow CLI Swarm diagnostiziert: ohne Daemon zustandslos, nicht praktikabel
+- Windows Toast Notifications implementiert: Erfolg auto-dismiss, Fehler persistenter alarm-Toast (bleibt bis OK-Klick)
