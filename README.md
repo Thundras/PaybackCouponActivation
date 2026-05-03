@@ -189,7 +189,22 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 
 ## Open TODOs
 
-- Investigate the 2026-04-27 anomaly (only 10/220 coupons activated) — likely PAYBACK-side rate limiting; consider adding a detection mechanism and longer back-off
+**High priority**
+
+- [ ] **Lock file** — prevent two instances from running simultaneously (caused a FATAL crash on 2026-03-23)
+- [ ] **Rate-limit detection with back-off** — when clicks repeatedly fail without DOM-detach, pause for 60–120s instead of aborting; addresses the 2026-04-27 anomaly (10/220 coupons activated)
+- [ ] **Translate log messages to English** — all `log()` calls in the script are currently in German
+
+**Medium priority**
+
+- [ ] **Windows toast notification on completion** — show activated coupon count after each run without opening the log file
+- [ ] **Mid-run session expiry detection** — check for login page when `noProgressStreak` triggers, not only at startup
+- [ ] **Scroll timeout** — add a maximum duration to `scrollToLoadAllCoupons` to prevent hangs if page height never stabilises
+
+**Low priority**
+
+- [ ] **Dry-run mode** (`--dry-run`) — count available coupons without activating them, useful for testing
+- [ ] **Pin Playwright version** — change `^1.58.2` to exact version in `package.json` to prevent unexpected behaviour from automatic minor updates
 
 ---
 
@@ -208,6 +223,20 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 1. Delete `user-data/`
 2. `node payback.js --login`
 3. Log in manually
+
+---
+
+## Change History
+
+### v1.1.1 — 2026-05-03
+- `bugfix` Screenshot fix: restore window before capture, minimize again after (CDP limitation with minimized windows)
+
+### v1.1.0 — 2026-05-03
+- `feature` Daily log rotation — `logs/payback-YYYY-MM-DD.log`, last 5 days retained
+- `feature` Safety limit raised from 150 to 500 iterations
+
+### v1.0.0 — 2026-03-20
+- `feature` Initial implementation
 
 ---
 
