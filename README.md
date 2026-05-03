@@ -68,6 +68,18 @@ node payback.js --login
 
 ---
 
+## Dry Run
+
+```bash
+node payback.js --dry-run
+```
+
+Scrolls through all coupons, counts inactive ones, shows a toast notification with the result — without activating anything. Use this to check the current coupon count without triggering the full activation.
+
+> **Note:** Dry-run still loads the full coupon page and should not be run repeatedly in quick succession.
+
+---
+
 ## Normal Operation
 
 ```bash
