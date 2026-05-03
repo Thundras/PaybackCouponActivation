@@ -126,14 +126,14 @@ Run once from the project folder to create both scheduled tasks:
 .\setup.ps1
 ```
 
-This creates two daily tasks (`PaybackCoupons_01` at 01:00, `PaybackCoupons_13` at 13:00) using the current folder path — no manual path editing required.
+This creates one task (`PaybackCoupons`) with two daily triggers (01:00 and 13:00) using the current folder path — no manual path editing required.
 
 ---
 
 ## Test Run
 
 ```cmd
-schtasks /run /tn "PaybackCoupons_13"
+schtasks /run /tn "PaybackCoupons"
 ```
 
 ---
