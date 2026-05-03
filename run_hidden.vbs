@@ -1,2 +1,4 @@
-Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "cmd /c cd /d C:\Users\iphar\Documents\PaybackCouponActivation && ""C:\Program Files\nodejs\node.exe"" payback.js", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+projectDir = fso.GetParentFolderName(WScript.ScriptFullName)
+shell.Run "cmd /c cd /d """ & projectDir & """ && node payback.js", 0, False

@@ -38,7 +38,8 @@ npx playwright install
 PaybackCouponActivation/
 │
 ├── payback.js              # Main script
-├── run_hidden.vbs          # Silent launcher
+├── run_hidden.vbs          # Silent launcher (path-independent, uses own location)
+├── setup.ps1               # Creates Windows Task Scheduler tasks
 ├── user-data/              # Browser profile (created automatically)
 ├── screenshots/            # Error screenshots
 ├── logs/                   # Daily log files (payback-YYYY-MM-DD.log)
@@ -119,29 +120,13 @@ WshShell.Run "cmd /c cd /d C:\Users\iphar\Documents\PaybackCouponActivation && "
 
 ## Automation (Windows Task Scheduler)
 
-### 01:00
+Run once from the project folder to create both scheduled tasks:
 
-```cmd
-schtasks /create ^
- /tn "PaybackCoupons_01" ^
- /tr "wscript.exe \"C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs\"" ^
- /sc daily ^
- /st 01:00 ^
- /ru "%USERNAME%" ^
- /f
+```powershell
+.\setup.ps1
 ```
 
-### 13:00
-
-```cmd
-schtasks /create ^
- /tn "PaybackCoupons_13" ^
- /tr "wscript.exe \"C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs\"" ^
- /sc daily ^
- /st 13:00 ^
- /ru "%USERNAME%" ^
- /f
-```
+This creates two daily tasks (`PaybackCoupons_01` at 01:00, `PaybackCoupons_13` at 13:00) using the current folder path — no manual path editing required.
 
 ---
 
@@ -218,6 +203,10 @@ _(none)_
 ---
 
 ## Change History
+
+### v1.6.0 — 2026-05-03
+- `feature` `run_hidden.vbs` now path-independent — derives project folder from its own location via `WScript.ScriptFullName`
+- `feature` `setup.ps1` creates Task Scheduler tasks without hardcoded paths
 
 ### v1.5.0 — 2026-05-03
 - `feature` Dry-run mode (`--dry-run`) — counts inactive coupons without activating, shows toast with result

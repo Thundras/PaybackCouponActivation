@@ -9,7 +9,8 @@
 | Pause      | 06:12 | 11:51 | —  |
 | Konzept    | 11:51 | 12:10 | 0.5h  |
 | Umsetzung  | 12:10 | 13:19 | 1.0h  |
-| Pause      | 13:19 |       |       |
+| Pause      | 13:19 | 16:54 | —     |
+| Umsetzung  | 16:54 |       |       |
 
 **Gesamt: 5.5h**
 
