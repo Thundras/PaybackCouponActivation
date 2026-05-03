@@ -11,9 +11,11 @@
 | Umsetzung  | 12:10 | 13:19 | 1.0h  |
 | Pause      | 13:19 | 16:54 | —     |
 | Umsetzung  | 16:54 | 17:35 | 1.0h  |
-| Pause      | 17:35 |       | —     |
+| Pause      | 17:35 | 17:38 | —     |
+| Umsetzung  | 17:38 | 17:54 | 0.5h  |
+| Pause      | 17:54 |       | —     |
 
-**Gesamt: 6.5h**
+**Gesamt: 7.0h**
 
 ### Was wurde gemacht
 - Ruflo-Projektinitialisierung (init, memory, swarm)
