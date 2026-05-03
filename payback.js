@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { spawn } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -105,12 +105,14 @@ $xml.LoadXml('${toastXml}')
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("PaybackCouponActivation").Show((New-Object Windows.UI.Notifications.ToastNotification($xml)))
 `;
         const encoded = Buffer.from(script, 'utf16le').toString('base64');
-        const proc = spawn(
-            'powershell',
-            ['-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded],
-            { detached: true, stdio: 'ignore', windowsHide: true }
-        );
-        proc.unref();
+        // Synchronous execution: ensures PowerShell completes before Node continues.
+        // spawn/detach does not work reliably on Windows — spawned processes are killed
+        // when the parent Node process exits before they finish starting up.
+        try {
+            execFileSync('powershell', ['-NonInteractive', '-EncodedCommand', encoded], { timeout: 5000 });
+        } catch {
+            // Non-fatal: notification failure must never abort the main script.
+        }
     }
 
     async function setWindowState(page, state) {

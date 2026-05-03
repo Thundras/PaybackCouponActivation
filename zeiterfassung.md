@@ -8,7 +8,7 @@
 | Umsetzung  | 02:46 | 06:12 | 3.5h  |
 
 | Konzept    | 11:51 | 12:10 | 0.5h  |
-| Umsetzung  | 12:10 | 12:59 | 1.0h  |
+| Umsetzung  | 12:10 | 13:14 | 1.0h  |
 
 **Gesamt: 5.5h**
 
