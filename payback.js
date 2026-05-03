@@ -8,6 +8,7 @@ const path = require('path');
     const logDir = path.resolve('./logs');
     const logFile = path.join(logDir, `payback-${new Date().toISOString().slice(0, 10)}.log`);
     const screenshotDir = path.resolve('./screenshots');
+    const lockFile = path.resolve('./payback.lock');
 
     function ensureDirectoryExists(dirPath) {
         if (!fs.existsSync(dirPath)) {
@@ -26,10 +27,32 @@ const path = require('path');
         }
     }
 
+    /**
+     * Acquires a process lock to prevent concurrent AUTO instances.
+     * Exits the process immediately if the lock file already exists.
+     */
+    function acquireLock() {
+        if (fs.existsSync(lockFile)) {
+            const pid = fs.readFileSync(lockFile, 'utf8').trim();
+            console.log(`[${new Date().toISOString()}] Another instance is already running (PID ${pid}). Exiting.`);
+            process.exit(0);
+        }
+        fs.writeFileSync(lockFile, String(process.pid), 'utf8');
+    }
+
+    /** Releases the process lock file. */
+    function releaseLock() {
+        try { fs.unlinkSync(lockFile); } catch {}
+    }
+
     ensureDirectoryExists(userDataDir);
     ensureDirectoryExists(screenshotDir);
     ensureDirectoryExists(logDir);
     cleanupOldLogs();
+
+    if (!isLoginMode) {
+        acquireLock();
+    }
 
     function timestamp() {
         return new Date().toISOString();
@@ -58,13 +81,13 @@ const path = require('path');
                 bounds: { windowState: state }
             });
         } catch (err) {
-            log(`Fenster-Status '${state}' konnte nicht gesetzt werden: ${err.message}`);
+            log(`Window state '${state}' could not be set: ${err.message}`);
         }
     }
 
     async function minimizeWindow(page) {
         await setWindowState(page, 'minimized');
-        log('Browser minimiert.');
+        log('Browser minimized.');
     }
 
     async function takeScreenshot(page, prefix) {
@@ -73,9 +96,9 @@ const path = require('path');
             await setWindowState(page, 'normal');
             await sleep(300);
             await page.screenshot({ path: file, fullPage: true });
-            log(`Screenshot gespeichert: ${file}`);
+            log(`Screenshot saved: ${file}`);
         } catch (err) {
-            log(`Screenshot fehlgeschlagen: ${err.message}`);
+            log(`Screenshot failed: ${err.message}`);
         } finally {
             await setWindowState(page, 'minimized');
         }
@@ -129,7 +152,7 @@ const path = require('path');
     }
 
     async function scrollToLoadAllCoupons(page) {
-        log('Scroll für Lazy Loading startet...');
+        log('Scroll for lazy loading started...');
 
         let lastHeight = -1;
         let stableRounds = 0;
@@ -151,7 +174,7 @@ const path = require('path');
         await page.evaluate(() => window.scrollTo(0, 0));
         await sleep(1000);
 
-        log('Scroll für Lazy Loading abgeschlossen.');
+        log('Scroll for lazy loading completed.');
     }
 
     async function isServiceUnavailableDialogOpen(page) {
@@ -180,17 +203,17 @@ const path = require('path');
     }
 
     async function recoverPage(page) {
-        log('Recovery: Seite wird neu geladen...');
+        log('Recovery: reloading page...');
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
         await sleep(3000);
 
         if (await isOnLoginPage(page)) {
-            log('Nach Reload auf Login-Seite gelandet. Session vermutlich abgelaufen.');
+            log('Redirected to login page after reload. Session likely expired.');
             return false;
         }
 
         if (!(await isCouponPageLoaded(page))) {
-            log('Coupon-Seite nach Reload nicht korrekt geladen.');
+            log('Coupon page did not load correctly after reload.');
             return false;
         }
 
@@ -202,6 +225,7 @@ const path = require('path');
         let activated = 0;
         let safetyCounter = 0;
         let noProgressStreak = 0;
+        let rateLimitStreak = 0;
         let reloadAttemptsForSameState = 0;
         let lastButtonCount = -1;
 
@@ -209,10 +233,10 @@ const path = require('path');
             safetyCounter++;
 
             if (await isServiceUnavailableDialogOpen(page)) {
-                log('PAYBACK meldet: Service derzeit nicht verfügbar. Abbruch.');
+                log('PAYBACK reports service currently unavailable. Aborting.');
                 const closed = await closeServiceUnavailableDialog(page);
                 if (closed) {
-                    log('Hinweis-Dialog wurde geschlossen.');
+                    log('Info dialog closed.');
                 }
                 break;
             }
@@ -220,11 +244,11 @@ const path = require('path');
             const buttonsBefore = await getInactiveButtonCount(page);
 
             if (buttonsBefore === 0) {
-                log('Keine aktivierbaren Buttons mehr im DOM.');
+                log('No more activatable buttons in DOM.');
                 break;
             }
 
-            log(`Noch aktivierbare Buttons im DOM: ${buttonsBefore}`);
+            log(`Activatable buttons remaining in DOM: ${buttonsBefore}`);
 
             if (buttonsBefore === lastButtonCount) {
                 noProgressStreak++;
@@ -235,12 +259,15 @@ const path = require('path');
             lastButtonCount = buttonsBefore;
 
             if (noProgressStreak >= 5) {
-                log(`Kein Fortschritt mehr bei ${buttonsBefore} verbleibenden Buttons. Abbruch.`);
+                log(`No progress for ${buttonsBefore} remaining buttons. Aborting.`);
                 break;
             }
 
             const button = page.locator('button[data-testid$="-not_activated"]').first();
             let progressed = false;
+            // Tracks a clean failure: click executed without error or service dialog, but coupon did not activate.
+            // Used to detect PAYBACK-side rate limiting distinct from DOM/network errors.
+            let cleanFailure = false;
 
             try {
                 await button.click({ timeout: 5000 });
@@ -248,10 +275,10 @@ const path = require('path');
                 await sleep(2500);
 
                 if (await isServiceUnavailableDialogOpen(page)) {
-                    log('Nach Klick wurde ein Service-nicht-verfügbar-Dialog angezeigt. Abbruch.');
+                    log('Service unavailable dialog appeared after click. Aborting.');
                     const closed = await closeServiceUnavailableDialog(page);
                     if (closed) {
-                        log('Hinweis-Dialog wurde geschlossen.');
+                        log('Info dialog closed.');
                     }
                     break;
                 }
@@ -262,16 +289,17 @@ const path = require('path');
                     activated++;
                     progressed = true;
                     noProgressStreak = 0;
+                    rateLimitStreak = 0;
                     reloadAttemptsForSameState = 0;
-                    log(`Coupon aktiviert: ${activated} (Buttons ${buttonsBefore} -> ${buttonsAfter})`);
+                    log(`Coupon activated: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
                 } else {
                     await sleep(4000);
 
                     if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Nach Wartezeit wurde ein Service-nicht-verfügbar-Dialog angezeigt. Abbruch.');
+                        log('Service unavailable dialog appeared after wait. Aborting.');
                         const closed = await closeServiceUnavailableDialog(page);
                         if (closed) {
-                            log('Hinweis-Dialog wurde geschlossen.');
+                            log('Info dialog closed.');
                         }
                         break;
                     }
@@ -282,8 +310,11 @@ const path = require('path');
                         activated++;
                         progressed = true;
                         noProgressStreak = 0;
+                        rateLimitStreak = 0;
                         reloadAttemptsForSameState = 0;
-                        log(`Coupon aktiviert: ${activated} (Buttons ${buttonsBefore} -> ${buttonsAfter})`);
+                        log(`Coupon activated: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
+                    } else {
+                        cleanFailure = true;
                     }
                 }
             } catch (err) {
@@ -293,10 +324,10 @@ const path = require('path');
                     await sleep(2000);
 
                     if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Nach DOM-Detach wurde ein Service-nicht-verfügbar-Dialog angezeigt. Abbruch.');
+                        log('Service unavailable dialog appeared after DOM detach. Aborting.');
                         const closed = await closeServiceUnavailableDialog(page);
                         if (closed) {
-                            log('Hinweis-Dialog wurde geschlossen.');
+                            log('Info dialog closed.');
                         }
                         break;
                     }
@@ -307,19 +338,20 @@ const path = require('path');
                         activated++;
                         progressed = true;
                         noProgressStreak = 0;
+                        rateLimitStreak = 0;
                         reloadAttemptsForSameState = 0;
-                        log(`Coupon vermutlich erfolgreich aktiviert trotz DOM-Detach: ${activated} (Buttons ${buttonsBefore} -> ${buttonsAfterDetach})`);
+                        log(`Coupon likely activated despite DOM detach: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfterDetach})`);
                     } else {
-                        log('DOM-Detach erkannt, aber Button-Anzahl hat sich nicht reduziert.');
+                        log('DOM detach detected, but button count did not decrease.');
                     }
                 } else {
-                    log(`Fehler beim Klick: ${msg}`);
+                    log(`Click error: ${msg}`);
 
                     if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Nach Klick-Fehler wurde ein Service-nicht-verfügbar-Dialog angezeigt. Abbruch.');
+                        log('Service unavailable dialog appeared after click error. Aborting.');
                         const closed = await closeServiceUnavailableDialog(page);
                         if (closed) {
-                            log('Hinweis-Dialog wurde geschlossen.');
+                            log('Info dialog closed.');
                         }
                         break;
                     }
@@ -330,25 +362,36 @@ const path = require('path');
                 await sleep(1000);
 
                 if (activated > 0 && activated % 20 === 0) {
-                    log('Kurze Pause zur Entlastung...');
+                    log('Short pause to reduce load...');
                     await sleep(8000);
                 }
 
                 continue;
             }
 
+            if (cleanFailure) {
+                rateLimitStreak++;
+                if (rateLimitStreak >= 3) {
+                    log('Rate limit suspected. Backing off for 90 seconds...');
+                    await sleep(90000);
+                    rateLimitStreak = 0;
+                    noProgressStreak = 0;
+                    continue;
+                }
+            }
+
             reloadAttemptsForSameState++;
 
             if (reloadAttemptsForSameState > 2) {
-                log(`Auch nach ${reloadAttemptsForSameState} Reload-Versuchen kein Fortschritt bei ${buttonsBefore} verbleibenden Buttons. Abbruch.`);
+                log(`No progress after ${reloadAttemptsForSameState} reload attempts with ${buttonsBefore} remaining buttons. Aborting.`);
                 break;
             }
 
-            log(`Kein Fortschritt. Recovery-Reload ${reloadAttemptsForSameState}/2...`);
+            log(`No progress. Recovery reload ${reloadAttemptsForSameState}/2...`);
 
             const recovered = await recoverPage(page);
             if (!recovered) {
-                log('Recovery fehlgeschlagen.');
+                log('Recovery failed.');
                 break;
             }
 
@@ -356,7 +399,7 @@ const path = require('path');
         }
 
         if (safetyCounter >= 500) {
-            log('Safety-Limit erreicht. Abbruch, um Endlosschleife zu vermeiden.');
+            log('Safety limit reached. Aborting to prevent infinite loop.');
         }
 
         return activated;
@@ -376,36 +419,36 @@ const path = require('path');
 
         page.on('framenavigated', frame => {
             if (frame === page.mainFrame()) {
-                log(`Navigation erkannt: ${frame.url()}`);
+                log(`Navigation detected: ${frame.url()}`);
             }
         });
 
         page.on('domcontentloaded', () => {
-            log('DOMContentLoaded Event');
+            log('DOMContentLoaded event');
         });
 
         page.on('load', () => {
-            log('Load Event');
+            log('Load event');
         });
 
         if (!isLoginMode) {
             await minimizeWindow(page);
         }
 
-        log('Navigation zur Coupon-Seite startet...');
+        log('Navigating to coupon page...');
         await page.goto('https://www.payback.de/coupons', {
             waitUntil: 'domcontentloaded',
             timeout: 30000
         });
-        log(`Navigation abgeschlossen. Aktuelle URL: ${page.url()}`);
+        log(`Navigation complete. Current URL: ${page.url()}`);
 
         await sleep(3000);
 
         if (isLoginMode) {
-            log('Login-Modus aktiv. Bitte jetzt manuell einloggen und danach Browser schließen.');
+            log('Login mode active. Please log in manually and then close the browser.');
 
             page.once('close', async () => {
-                log('Browser geschlossen. Session sollte gespeichert sein.');
+                log('Browser closed. Session should be saved.');
                 try {
                     await context.close();
                 } catch {}
@@ -415,14 +458,14 @@ const path = require('path');
         }
 
         if (await isOnLoginPage(page)) {
-            log('Nicht eingeloggt. Bitte einmal mit --login anmelden.');
+            log('Not logged in. Please run once with --login.');
             await takeScreenshot(page, 'not-logged-in');
             await context.close();
             return;
         }
 
         if (!(await isCouponPageLoaded(page))) {
-            log('Coupon-Seite wurde nicht wie erwartet geladen.');
+            log('Coupon page did not load as expected.');
             await takeScreenshot(page, 'coupon-page-not-ready');
             await context.close();
             return;
@@ -433,32 +476,32 @@ const path = require('path');
         const headlineStart = await getInactiveCouponCount(page);
         const buttonStart = await getInactiveButtonCount(page);
 
-        log(`Headline Count zu Beginn: ${headlineStart ?? 'unbekannt'}`);
-        log(`Aktivierbare Buttons zu Beginn: ${buttonStart}`);
+        log(`Headline count at start: ${headlineStart ?? 'unknown'}`);
+        log(`Activatable buttons at start: ${buttonStart}`);
 
         if (buttonStart === 0) {
-            log('Keine nicht aktivierten Coupons vorhanden.');
+            log('No inactive coupons found.');
             await context.close();
-            log('Fertig');
+            log('Done');
             return;
         }
 
         const activated = await activateAllCoupons(page);
-        log(`Aktiviert gesamt: ${activated}`);
+        log(`Total activated: ${activated}`);
 
         const headlineEnd = await getInactiveCouponCount(page);
         const buttonEnd = await getInactiveButtonCount(page);
 
-        log(`Verbleibend laut Headline: ${headlineEnd ?? 'unbekannt'}`);
-        log(`Verbleibende aktivierbare Buttons im DOM: ${buttonEnd}`);
+        log(`Remaining according to headline: ${headlineEnd ?? 'unknown'}`);
+        log(`Remaining activatable buttons in DOM: ${buttonEnd}`);
 
         if (buttonEnd > 0) {
-            log('WARNUNG: Es sind noch aktivierbare Buttons übrig.');
+            log('WARNING: There are still activatable buttons remaining.');
         }
 
         await sleep(1500);
         await context.close();
-        log('Fertig');
+        log('Done');
     } catch (err) {
         log(`FATAL: ${err.message}`);
 
@@ -472,6 +515,9 @@ const path = require('path');
             } catch {}
         }
     } finally {
+        if (!isLoginMode) {
+            releaseLock();
+        }
         log('------------------------------------------------------');
     }
 })();

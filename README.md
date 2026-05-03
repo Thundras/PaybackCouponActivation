@@ -191,9 +191,9 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 
 **High priority**
 
-- [ ] **Lock file** — prevent two instances from running simultaneously (caused a FATAL crash on 2026-03-23)
-- [ ] **Rate-limit detection with back-off** — when clicks repeatedly fail without DOM-detach, pause for 60–120s instead of aborting; addresses the 2026-04-27 anomaly (10/220 coupons activated)
-- [ ] **Translate log messages to English** — all `log()` calls in the script are currently in German
+- [x] **Lock file** — prevent two instances from running simultaneously (caused a FATAL crash on 2026-03-23)
+- [x] **Rate-limit detection with back-off** — when clicks repeatedly fail without DOM-detach, pause for 60–120s instead of aborting; addresses the 2026-04-27 anomaly (10/220 coupons activated)
+- [x] **Translate log messages to English** — all `log()` calls in the script are currently in German
 
 **Medium priority**
 
@@ -227,6 +227,11 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 ---
 
 ## Change History
+
+### v1.2.0 — 2026-05-03
+- `feature` Lock file (`payback.lock`) to prevent concurrent AUTO instances
+- `feature` Rate-limit detection — 3 consecutive clean failures trigger a 90s back-off before retrying
+- `feature` All log messages translated to English
 
 ### v1.1.1 — 2026-05-03
 - `bugfix` Screenshot fix: restore window before capture, minimize again after (CDP limitation with minimized windows)
