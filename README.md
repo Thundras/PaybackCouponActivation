@@ -81,6 +81,8 @@ The script:
 4. Activates all inactive coupons
 5. Exits automatically
 
+> **Recommendation:** Run the script automatically via Windows Task Scheduler 1–2 times per day. PAYBACK periodically adds large batches of new coupons; running twice daily (e.g. 01:00 and 13:00) ensures they are picked up promptly. See the [Automation](#automation-windows-task-scheduler) section below.
+
 ---
 
 ## Script Logic
