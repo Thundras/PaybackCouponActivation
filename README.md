@@ -189,12 +189,6 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 
 ## Open TODOs
 
-**High priority**
-
-- [x] **Lock file** — prevent two instances from running simultaneously (caused a FATAL crash on 2026-03-23)
-- [x] **Rate-limit detection with back-off** — when clicks repeatedly fail without DOM-detach, pause for 60–120s instead of aborting; addresses the 2026-04-27 anomaly (10/220 coupons activated)
-- [x] **Translate log messages to English** — all `log()` calls in the script are currently in German
-
 **Medium priority**
 
 - [ ] **Windows toast notification on completion** — show activated coupon count after each run without opening the log file
