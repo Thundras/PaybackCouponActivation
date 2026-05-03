@@ -1,29 +1,29 @@
 # Payback Coupon Auto Activation
 
-Automatisiertes Aktivieren aller PAYBACK Coupons mittels Playwright.
+Automated activation of all PAYBACK coupons using Playwright.
 
-Das Script öffnet die PAYBACK Coupon-Seite, lädt alle verfügbaren Coupons und aktiviert automatisch alle noch nicht aktivierten Angebote.
-
----
-
-## 🚀 Features
-
-- Automatisches Aktivieren aller Coupons
-- Persistente Login-Session (kein erneutes Login notwendig)
-- Logging mit Zeitstempel
-- Screenshot bei Fehlern
-- Unterstützung für Lazy Loading (Scroll-Automatik)
-- Ausführung im Hintergrund (kein störendes CMD-Fenster)
-- Windows Aufgabenplanung Integration
+The script opens the PAYBACK coupon page, loads all available coupons, and automatically activates every offer that has not been activated yet.
 
 ---
 
-## 📦 Voraussetzungen
+## Features
 
-- Node.js installiert  
+- Automatic activation of all available coupons
+- Persistent login session (no repeated login required)
+- Timestamped logging with daily log rotation (5 days retained)
+- Screenshots on errors
+- Lazy loading support via scroll automation
+- Background execution (no visible console window)
+- Windows Task Scheduler integration
+
+---
+
+## Prerequisites
+
+- Node.js installed
   → https://nodejs.org/
 
-- Playwright installiert:
+- Playwright installed:
 
 ```bash
 npm install playwright
@@ -32,69 +32,79 @@ npx playwright install
 
 ---
 
-## 📁 Projektstruktur
+## Project Structure
 
+```
 PaybackCouponActivation/
 │
-├── payback.js              # Hauptscript
-├── run_hidden.vbs          # Startscript (unsichtbar)
-├── user-data/              # Browserprofil (automatisch erstellt)
-├── screenshots/            # Fehler-Screenshots
-├── payback.log             # Logfile
+├── payback.js              # Main script
+├── run_hidden.vbs          # Silent launcher
+├── user-data/              # Browser profile (created automatically)
+├── screenshots/            # Error screenshots
+├── logs/                   # Daily log files (payback-YYYY-MM-DD.log)
 └── README.md
+```
 
 ---
 
-## 🔐 Login (einmalig erforderlich)
+## Login (required once)
 
-Beim ersten Start muss man sich manuell einloggen.
+The first run requires a manual login.
 
-### Login starten:
+### Start login mode:
 
 ```bash
 node payback.js --login
 ```
 
-### Ablauf:
+### Steps:
 
-1. Browser öffnet sich
-2. Manuell bei PAYBACK einloggen
-3. Browser schließen
+1. Browser opens
+2. Log in to PAYBACK manually
+3. Close the browser
 
-→ Login-Session wird im Ordner `user-data` gespeichert
+→ The session is saved in the `user-data` folder and reused on subsequent runs.
 
 ---
 
-## ⚙️ Normaler Betrieb
+## Normal Operation
 
 ```bash
 node payback.js
 ```
 
-Das Script:
+The script:
 
-1. Öffnet PAYBACK
-2. Prüft Login
-3. Scrollt durch alle Coupons
-4. Aktiviert alle nicht aktivierten Coupons
-5. Beendet sich automatisch
-
----
-
-## 🧠 Logik im Script
-
-### Zustände:
-
-| Zustand | Verhalten |
-|--------|----------|
-| Nicht eingeloggt | Screenshot + Abbruch |
-| Keine Coupons verfügbar | Sauberer Exit |
-| Coupons vorhanden | Aktivierung |
-| Fehler | Screenshot + Log |
+1. Opens PAYBACK
+2. Verifies login state
+3. Scrolls through all coupons (handles lazy loading)
+4. Activates all inactive coupons
+5. Exits automatically
 
 ---
 
-## 🪟 Hintergrundausführung (ohne Konsole)
+## Script Logic
+
+### States:
+
+| State | Behaviour |
+|---|---|
+| Not logged in | Screenshot + abort |
+| No coupons available | Clean exit |
+| Coupons found | Activation loop |
+| Error | Screenshot + log |
+
+### Termination conditions (activation loop):
+
+| Condition | Description |
+|---|---|
+| `noProgressStreak >= 5` | Button count unchanged for 5 consecutive iterations |
+| `reloadAttemptsForSameState > 2` | 3 failed page reloads without progress |
+| `safetyCounter >= 500` | Hard limit as last-resort infinite-loop guard |
+
+---
+
+## Background Execution (no console window)
 
 ### run_hidden.vbs
 
@@ -105,80 +115,100 @@ WshShell.Run "cmd /c cd /d C:\Users\iphar\Documents\PaybackCouponActivation && "
 
 ---
 
-## ⏰ Automatisierung (Windows Aufgabenplanung)
+## Automation (Windows Task Scheduler)
 
-### 03:00 Uhr
+### 01:00
 
 ```cmd
 schtasks /create ^
- /tn "PaybackCoupons_03" ^
- /tr "wscript.exe "C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs"" ^
+ /tn "PaybackCoupons_01" ^
+ /tr "wscript.exe \"C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs\"" ^
  /sc daily ^
- /st 03:00 ^
+ /st 01:00 ^
  /ru "%USERNAME%" ^
  /f
 ```
 
-### 15:00 Uhr
+### 13:00
 
 ```cmd
 schtasks /create ^
- /tn "PaybackCoupons_15" ^
- /tr "wscript.exe "C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs"" ^
+ /tn "PaybackCoupons_13" ^
+ /tr "wscript.exe \"C:\Users\iphar\Documents\PaybackCouponActivation\run_hidden.vbs\"" ^
  /sc daily ^
- /st 15:00 ^
+ /st 13:00 ^
  /ru "%USERNAME%" ^
  /f
 ```
 
 ---
 
-## 🧪 Testlauf
+## Test Run
 
 ```cmd
-schtasks /run /tn "PaybackCoupons_15"
+schtasks /run /tn "PaybackCoupons_13"
 ```
 
 ---
 
-## 📋 Logs
+## Logs
 
-logs/payback-YYYY-MM-DD.log (tägliche Datei, die letzten 5 Tage werden behalten)
-
----
-
-## 📸 Screenshots
-
-screenshots/
+`logs/payback-YYYY-MM-DD.log` — one file per day, last 5 days retained.
 
 ---
 
-## ⚠️ Einschränkungen
+## Screenshots
 
-- Benutzer muss angemeldet sein
-- Rechner darf nicht im Standby sein
-- Login-Session kann ablaufen
+Saved to `screenshots/` on error conditions (not logged in, page not ready, fatal error).
 
 ---
 
-## 🧯 Troubleshooting
+## Limitations
 
-### Nicht eingeloggt
-→ node payback.js --login
-
-### Script hängt
-→ user-data löschen und neu einloggen
+- User must be logged in (run `--login` once)
+- Machine must not be in standby during scheduled runs
+- Login session can expire over time
 
 ---
 
-## 🧼 Reset
+## Known Issues
 
-1. user-data löschen
-2. node payback.js --login
-3. neu einloggen
+### Browser window briefly flashes during error screenshots
+
+The browser runs minimized in the background during normal operation. Screenshots are only taken in error scenarios.
+
+Chromium in visible mode (`headless: false`) **cannot capture screenshots from a minimized window** — this is a Chrome DevTools Protocol (CDP) limitation: the rendering pipeline for minimized windows is suspended by the OS, so no image data is available.
+
+As a workaround, the window is temporarily restored to `normal` state before the screenshot and immediately minimized again. This causes a brief visible flash of the browser window.
+
+Using `headless: true` would avoid this, but risks PAYBACK detecting the browser as a bot and blocking it. The deliberate choice is to keep `headless: false`.
 
 ---
 
-## 📌 Fazit
+## Open TODOs
 
-Saubere, wartbare Automatisierung ohne unnötige Komplexität.
+- Investigate the 2026-04-27 anomaly (only 10/220 coupons activated) — likely PAYBACK-side rate limiting; consider adding a detection mechanism and longer back-off
+
+---
+
+## Troubleshooting
+
+### Not logged in
+→ `node payback.js --login`
+
+### Script hangs
+→ Delete `user-data/` and run `--login` again
+
+---
+
+## Reset
+
+1. Delete `user-data/`
+2. `node payback.js --login`
+3. Log in manually
+
+---
+
+## Summary
+
+Clean, maintainable automation without unnecessary complexity.

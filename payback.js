@@ -49,27 +49,35 @@ const path = require('path');
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async function takeScreenshot(page, prefix) {
-        const file = path.join(screenshotDir, `${prefix}-${fileSafeTimestamp()}.png`);
-        try {
-            await page.screenshot({ path: file, fullPage: true });
-            log(`Screenshot gespeichert: ${file}`);
-        } catch (err) {
-            log(`Screenshot fehlgeschlagen: ${err.message}`);
-        }
-    }
-
-    async function minimizeWindow(page) {
+    async function setWindowState(page, state) {
         try {
             const cdp = await page.context().newCDPSession(page);
             const { windowId } = await cdp.send('Browser.getWindowForTarget');
             await cdp.send('Browser.setWindowBounds', {
                 windowId,
-                bounds: { windowState: 'minimized' }
+                bounds: { windowState: state }
             });
-            log('Browser minimiert.');
         } catch (err) {
-            log(`Fenster konnte nicht minimiert werden: ${err.message}`);
+            log(`Fenster-Status '${state}' konnte nicht gesetzt werden: ${err.message}`);
+        }
+    }
+
+    async function minimizeWindow(page) {
+        await setWindowState(page, 'minimized');
+        log('Browser minimiert.');
+    }
+
+    async function takeScreenshot(page, prefix) {
+        const file = path.join(screenshotDir, `${prefix}-${fileSafeTimestamp()}.png`);
+        try {
+            await setWindowState(page, 'normal');
+            await sleep(300);
+            await page.screenshot({ path: file, fullPage: true });
+            log(`Screenshot gespeichert: ${file}`);
+        } catch (err) {
+            log(`Screenshot fehlgeschlagen: ${err.message}`);
+        } finally {
+            await setWindowState(page, 'minimized');
         }
     }
 
