@@ -1,7 +1,6 @@
 $projectDir = $PSScriptRoot
-$vbs = "$projectDir\run_hidden.vbs"
 
-$action   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`"" -WorkingDirectory $projectDir
+$action   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "run_hidden.vbs" -WorkingDirectory $projectDir
 $triggers = @(
     (New-ScheduledTaskTrigger -Daily -At "01:00"),
     (New-ScheduledTaskTrigger -Daily -At "13:00")
