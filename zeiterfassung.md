@@ -8,9 +8,9 @@
 | Umsetzung  | 02:46 | 06:12 | 3.5h  |
 
 | Konzept    | 11:51 | 12:10 | 0.5h  |
-| Umsetzung  | 12:10 | 12:48 | 0.5h  |
+| Umsetzung  | 12:10 | 12:59 | 1.0h  |
 
-**Gesamt: 5.0h**
+**Gesamt: 5.5h**
 
 **▶ Aktiv seit 11:51**
 
@@ -35,3 +35,5 @@
 - Windows Toast Notifications implementiert: Erfolg auto-dismiss, Fehler persistenter alarm-Toast (bleibt bis OK-Klick)
 - Mid-run Session-Expiry-Erkennung: Login-Prüfung bei noProgressStreak und Recovery-Fehler
 - Scroll-Timeout: scrollToLoadAllCoupons bricht nach 90s ab
+- Dry-run Mode (--dry-run): zählt Coupons ohne Aktivierung, zeigt Toast
+- Playwright-Version auf 1.58.2 gepinnt

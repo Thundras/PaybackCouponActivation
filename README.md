@@ -195,8 +195,7 @@ _(none)_
 
 **Low priority**
 
-- [ ] **Dry-run mode** (`--dry-run`) — count available coupons without activating them, useful for testing
-- [ ] **Pin Playwright version** — change `^1.58.2` to exact version in `package.json` to prevent unexpected behaviour from automatic minor updates
+_(none)_
 
 ---
 
@@ -219,6 +218,10 @@ _(none)_
 ---
 
 ## Change History
+
+### v1.5.0 — 2026-05-03
+- `feature` Dry-run mode (`--dry-run`) — counts inactive coupons without activating, shows toast with result
+- `feature` Playwright version pinned to `1.58.2` (removed `^`)
 
 ### v1.4.0 — 2026-05-03
 - `feature` Mid-run session expiry detection — checks for login page when `noProgressStreak` or recovery fails, shows persistent toast

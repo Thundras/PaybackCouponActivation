@@ -5,6 +5,7 @@ const path = require('path');
 
 (async () => {
     const isLoginMode = process.argv.includes('--login');
+    const isDryRunMode = process.argv.includes('--dry-run');
     const userDataDir = path.resolve('./user-data');
     const logDir = path.resolve('./logs');
     const logFile = path.join(logDir, `payback-${new Date().toISOString().slice(0, 10)}.log`);
@@ -51,7 +52,7 @@ const path = require('path');
     ensureDirectoryExists(logDir);
     cleanupOldLogs();
 
-    if (!isLoginMode) {
+    if (!isLoginMode && !isDryRunMode) {
         acquireLock();
     }
 
@@ -538,6 +539,15 @@ $xml.LoadXml('${toastXml}')
         log(`Headline count at start: ${headlineStart ?? 'unknown'}`);
         log(`Activatable buttons at start: ${buttonStart}`);
 
+        if (isDryRunMode) {
+            const countLabel = headlineStart != null ? `${headlineStart} (headline) / ${buttonStart} (DOM)` : `${buttonStart} (DOM)`;
+            log(`Dry-run: ${countLabel} inactive coupon(s) found. No activation performed.`);
+            showWindowsToast('Payback Dry-Run', `${buttonStart} inaktive Coupon(s) gefunden. Keine Aktivierung.`);
+            await context.close();
+            log('Done');
+            return;
+        }
+
         if (buttonStart === 0) {
             log('No inactive coupons found.');
             showWindowsToast('Payback', 'Keine inaktiven Coupons gefunden.');
@@ -579,7 +589,7 @@ $xml.LoadXml('${toastXml}')
             } catch {}
         }
     } finally {
-        if (!isLoginMode) {
+        if (!isLoginMode && !isDryRunMode) {
             releaseLock();
         }
         log('------------------------------------------------------');
