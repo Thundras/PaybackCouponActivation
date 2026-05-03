@@ -5,3 +5,10 @@ screenshots/
 .claude-flow/
 .swarm/
 ruvector.db
+payback.lock
+.claude/agents/
+.claude/skills/
+.claude/commands/
+.claude/helpers/
+.claude/memory.db
+.claude/settings.local.json

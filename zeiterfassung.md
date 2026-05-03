@@ -5,9 +5,9 @@
 | Phase      | Start | Ende  | Dauer |
 |------------|-------|-------|-------|
 | Konzept    | 02:34 | 02:46 | 0.5h  |
-| Umsetzung  | 02:46 | 05:29 | 2.5h  |
+| Umsetzung  | 02:46 | 05:43 | 3.0h  |
 
-**Gesamt: 3.0h** *(2h55min gemessen)*
+**Gesamt: 3.5h** *(3h09min gemessen)*
 
 ### Was wurde gemacht
 - Ruflo-Projektinitialisierung (init, memory, swarm)
@@ -22,3 +22,5 @@
 - Lock-File gegen parallele Instanzen implementiert
 - Rate-Limit-Erkennung mit 90s Back-off implementiert
 - Alle Log-Meldungen auf Englisch übersetzt
+- GitHub Wiki mit 5 Seiten erstellt
+- Repo von Ruflo-Boilerplate bereinigt (.gitignore erweitert)
