@@ -5,9 +5,9 @@
 | Phase      | Start | Ende  | Dauer |
 |------------|-------|-------|-------|
 | Konzept    | 02:34 | 02:46 | 0.5h  |
-| Umsetzung  | 02:46 | 05:43 | 3.0h  |
+| Umsetzung  | 02:46 | 06:07 | 3.5h  |
 
-**Gesamt: 3.5h** *(3h09min gemessen)*
+**Gesamt: 4.0h** *(3h33min gemessen)*
 
 ### Was wurde gemacht
 - Ruflo-Projektinitialisierung (init, memory, swarm)
