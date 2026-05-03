@@ -204,6 +204,13 @@ _(none)_
 
 ## Change History
 
+### v1.8.0 — 2026-05-03
+- `feature` CCD refactoring: DRY and SRP improvements
+  - `checkAndHandleServiceUnavailable` eliminates 4× repeated dialog-handling pattern
+  - `attemptButtonClick` extracts click logic from activation loop
+  - `recordActivation` closure eliminates 3× repeated counter-reset pattern
+  - `activateAllCoupons` reduced from 190 to 115 lines
+
 ### v1.7.0 — 2026-05-03
 - `feature` All magic numbers and strings extracted as named constants
 

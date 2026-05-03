@@ -292,6 +292,24 @@ $xml.LoadXml('${toastXml}')
         }
     }
 
+    /**
+     * Checks for the service unavailable dialog and handles it if present.
+     * @param {import('playwright').Page} page
+     * @param {string} context - Description of when this check occurred (for logging).
+     * @returns {Promise<boolean>} true if the dialog was present (caller should abort).
+     */
+    async function checkAndHandleServiceUnavailable(page, context) {
+        if (!(await isServiceUnavailableDialogOpen(page))) {
+            return false;
+        }
+        log(`Service unavailable dialog appeared after ${context}. Aborting.`);
+        const closed = await closeServiceUnavailableDialog(page);
+        if (closed) {
+            log('Info dialog closed.');
+        }
+        return true;
+    }
+
     async function recoverPage(page) {
         log('Recovery: reloading page...');
         await page.reload({ waitUntil: 'domcontentloaded', timeout: PAGE_RELOAD_TIMEOUT_MS });
@@ -311,6 +329,69 @@ $xml.LoadXml('${toastXml}')
         return true;
     }
 
+    /**
+     * Attempts to click the first inactive coupon button and checks whether activation succeeded.
+     * @param {import('playwright').Page} page
+     * @param {import('playwright').Locator} button
+     * @param {number} buttonsBefore - Button count before the click attempt.
+     * @returns {Promise<{ shouldAbort: boolean, progressed: boolean, cleanFailure: boolean, buttonsAfter: number, isDomDetach: boolean }>}
+     */
+    async function attemptButtonClick(page, button, buttonsBefore) {
+        try {
+            await button.click({ timeout: BUTTON_CLICK_TIMEOUT_MS });
+            await sleep(POST_CLICK_DELAY_MS);
+
+            if (await checkAndHandleServiceUnavailable(page, 'click')) {
+                return { shouldAbort: true, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: false };
+            }
+
+            let buttonsAfter = await getInactiveButtonCount(page);
+            if (buttonsAfter < buttonsBefore) {
+                return { shouldAbort: false, progressed: true, cleanFailure: false, buttonsAfter, isDomDetach: false };
+            }
+
+            await sleep(POST_CLICK_EXTENDED_DELAY_MS);
+
+            if (await checkAndHandleServiceUnavailable(page, 'extended wait')) {
+                return { shouldAbort: true, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: false };
+            }
+
+            buttonsAfter = await getInactiveButtonCount(page);
+            if (buttonsAfter < buttonsBefore) {
+                return { shouldAbort: false, progressed: true, cleanFailure: false, buttonsAfter, isDomDetach: false };
+            }
+
+            return { shouldAbort: false, progressed: false, cleanFailure: true, buttonsAfter: buttonsBefore, isDomDetach: false };
+
+        } catch (err) {
+            const msg = String(err.message || err);
+
+            if (msg.includes(ERROR_MSG_DOM_DETACH)) {
+                await sleep(DOM_DETACH_RECOVERY_DELAY_MS);
+
+                if (await checkAndHandleServiceUnavailable(page, 'DOM detach')) {
+                    return { shouldAbort: true, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: true };
+                }
+
+                const buttonsAfterDetach = await getInactiveButtonCount(page);
+                if (buttonsAfterDetach < buttonsBefore) {
+                    return { shouldAbort: false, progressed: true, cleanFailure: false, buttonsAfter: buttonsAfterDetach, isDomDetach: true };
+                }
+
+                log('DOM detach detected, but button count did not decrease.');
+                return { shouldAbort: false, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: true };
+            }
+
+            log(`Click error: ${msg}`);
+
+            if (await checkAndHandleServiceUnavailable(page, 'click error')) {
+                return { shouldAbort: true, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: false };
+            }
+
+            return { shouldAbort: false, progressed: false, cleanFailure: false, buttonsAfter: buttonsBefore, isDomDetach: false };
+        }
+    }
+
     async function activateAllCoupons(page) {
         let activated = 0;
         let safetyCounter = 0;
@@ -319,15 +400,19 @@ $xml.LoadXml('${toastXml}')
         let reloadAttemptsForSameState = 0;
         let lastButtonCount = -1;
 
+        // Closure: updates all streak counters and logs the activation.
+        function recordActivation(buttonsBefore, buttonsAfter, logPrefix) {
+            activated++;
+            noProgressStreak = 0;
+            rateLimitStreak = 0;
+            reloadAttemptsForSameState = 0;
+            log(`${logPrefix}: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
+        }
+
         while (safetyCounter < SAFETY_LIMIT) {
             safetyCounter++;
 
-            if (await isServiceUnavailableDialogOpen(page)) {
-                log('PAYBACK reports service currently unavailable. Aborting.');
-                const closed = await closeServiceUnavailableDialog(page);
-                if (closed) {
-                    log('Info dialog closed.');
-                }
+            if (await checkAndHandleServiceUnavailable(page, 'loop start')) {
                 break;
             }
 
@@ -359,104 +444,21 @@ $xml.LoadXml('${toastXml}')
             }
 
             const button = page.locator(SELECTOR_INACTIVE_BUTTON).first();
-            let progressed = false;
-            // Tracks a clean failure: click executed without error or service dialog, but coupon did not activate.
-            // Used to detect PAYBACK-side rate limiting distinct from DOM/network errors.
-            let cleanFailure = false;
+            const result = await attemptButtonClick(page, button, buttonsBefore);
 
-            try {
-                await button.click({ timeout: BUTTON_CLICK_TIMEOUT_MS });
-
-                await sleep(POST_CLICK_DELAY_MS);
-
-                if (await isServiceUnavailableDialogOpen(page)) {
-                    log('Service unavailable dialog appeared after click. Aborting.');
-                    const closed = await closeServiceUnavailableDialog(page);
-                    if (closed) {
-                        log('Info dialog closed.');
-                    }
-                    break;
-                }
-
-                let buttonsAfter = await getInactiveButtonCount(page);
-
-                if (buttonsAfter < buttonsBefore) {
-                    activated++;
-                    progressed = true;
-                    noProgressStreak = 0;
-                    rateLimitStreak = 0;
-                    reloadAttemptsForSameState = 0;
-                    log(`Coupon activated: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
-                } else {
-                    await sleep(POST_CLICK_EXTENDED_DELAY_MS);
-
-                    if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Service unavailable dialog appeared after wait. Aborting.');
-                        const closed = await closeServiceUnavailableDialog(page);
-                        if (closed) {
-                            log('Info dialog closed.');
-                        }
-                        break;
-                    }
-
-                    buttonsAfter = await getInactiveButtonCount(page);
-
-                    if (buttonsAfter < buttonsBefore) {
-                        activated++;
-                        progressed = true;
-                        noProgressStreak = 0;
-                        rateLimitStreak = 0;
-                        reloadAttemptsForSameState = 0;
-                        log(`Coupon activated: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
-                    } else {
-                        cleanFailure = true;
-                    }
-                }
-            } catch (err) {
-                const msg = String(err.message || err);
-
-                if (msg.includes(ERROR_MSG_DOM_DETACH)) {
-                    await sleep(DOM_DETACH_RECOVERY_DELAY_MS);
-
-                    if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Service unavailable dialog appeared after DOM detach. Aborting.');
-                        const closed = await closeServiceUnavailableDialog(page);
-                        if (closed) {
-                            log('Info dialog closed.');
-                        }
-                        break;
-                    }
-
-                    const buttonsAfterDetach = await getInactiveButtonCount(page);
-
-                    if (buttonsAfterDetach < buttonsBefore) {
-                        activated++;
-                        progressed = true;
-                        noProgressStreak = 0;
-                        rateLimitStreak = 0;
-                        reloadAttemptsForSameState = 0;
-                        log(`Coupon likely activated despite DOM detach: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfterDetach})`);
-                    } else {
-                        log('DOM detach detected, but button count did not decrease.');
-                    }
-                } else {
-                    log(`Click error: ${msg}`);
-
-                    if (await isServiceUnavailableDialogOpen(page)) {
-                        log('Service unavailable dialog appeared after click error. Aborting.');
-                        const closed = await closeServiceUnavailableDialog(page);
-                        if (closed) {
-                            log('Info dialog closed.');
-                        }
-                        break;
-                    }
-                }
+            if (result.shouldAbort) {
+                break;
             }
 
-            if (progressed) {
+            if (result.progressed) {
+                const logPrefix = result.isDomDetach
+                    ? 'Coupon likely activated despite DOM detach'
+                    : 'Coupon activated';
+                recordActivation(buttonsBefore, result.buttonsAfter, logPrefix);
+
                 await sleep(POST_PROGRESS_DELAY_MS);
 
-                if (activated > 0 && activated % PERIODIC_PAUSE_EVERY_N_ACTIVATIONS === 0) {
+                if (activated % PERIODIC_PAUSE_EVERY_N_ACTIVATIONS === 0) {
                     log('Short pause to reduce load...');
                     await sleep(PERIODIC_PAUSE_DURATION_MS);
                 }
@@ -464,7 +466,7 @@ $xml.LoadXml('${toastXml}')
                 continue;
             }
 
-            if (cleanFailure) {
+            if (result.cleanFailure) {
                 rateLimitStreak++;
                 if (rateLimitStreak >= RATE_LIMIT_STREAK_LIMIT) {
                     log(`Rate limit suspected. Backing off for ${RATE_LIMIT_BACKOFF_MS / 1000} seconds...`);
