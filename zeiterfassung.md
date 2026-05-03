@@ -8,7 +8,7 @@
 | Umsetzung  | 02:46 | 06:12 | 3.5h  |
 
 | Konzept    | 11:51 | 12:10 | 0.5h  |
-| Umsetzung  | 12:10 | 12:34 | 0.5h  |
+| Umsetzung  | 12:10 | 12:48 | 0.5h  |
 
 **Gesamt: 5.0h**
 
@@ -33,3 +33,5 @@
 - CLAUDE.md Swarm-Pattern korrigiert (team_name war fehlend)
 - Claude-Flow CLI Swarm diagnostiziert: ohne Daemon zustandslos, nicht praktikabel
 - Windows Toast Notifications implementiert: Erfolg auto-dismiss, Fehler persistenter alarm-Toast (bleibt bis OK-Klick)
+- Mid-run Session-Expiry-Erkennung: Login-Prüfung bei noProgressStreak und Recovery-Fehler
+- Scroll-Timeout: scrollToLoadAllCoupons bricht nach 90s ab

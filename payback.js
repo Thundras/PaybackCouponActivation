@@ -196,8 +196,11 @@ $xml.LoadXml('${toastXml}')
 
         let lastHeight = -1;
         let stableRounds = 0;
+        let scrollAttempts = 0;
+        const maxScrollAttempts = 60; // 60 × 1.5s = 90s max
 
-        while (stableRounds < 3) {
+        while (stableRounds < 3 && scrollAttempts < maxScrollAttempts) {
+            scrollAttempts++;
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
             await sleep(1500);
 
@@ -209,6 +212,10 @@ $xml.LoadXml('${toastXml}')
                 stableRounds = 0;
                 lastHeight = newHeight;
             }
+        }
+
+        if (scrollAttempts >= maxScrollAttempts) {
+            log('Scroll timeout reached (90s). Proceeding with coupons loaded so far.');
         }
 
         await page.evaluate(() => window.scrollTo(0, 0));
@@ -299,7 +306,12 @@ $xml.LoadXml('${toastXml}')
             lastButtonCount = buttonsBefore;
 
             if (noProgressStreak >= 5) {
-                log(`No progress for ${buttonsBefore} remaining buttons. Aborting.`);
+                if (await isOnLoginPage(page)) {
+                    log('Session expired mid-run (detected via noProgressStreak). Please run with --login.');
+                    showWindowsToast('Payback: Session abgelaufen', 'Session ist während des Laufs abgelaufen. Bitte mit --login neu einloggen.', true);
+                } else {
+                    log(`No progress for ${buttonsBefore} remaining buttons. Aborting.`);
+                }
                 break;
             }
 
@@ -431,7 +443,12 @@ $xml.LoadXml('${toastXml}')
 
             const recovered = await recoverPage(page);
             if (!recovered) {
-                log('Recovery failed.');
+                if (await isOnLoginPage(page)) {
+                    log('Session expired mid-run (detected via recovery). Please run with --login.');
+                    showWindowsToast('Payback: Session abgelaufen', 'Session ist während des Laufs abgelaufen. Bitte mit --login neu einloggen.', true);
+                } else {
+                    log('Recovery failed.');
+                }
                 break;
             }
 

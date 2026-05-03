@@ -191,8 +191,7 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 
 **Medium priority**
 
-- [ ] **Mid-run session expiry detection** — check for login page when `noProgressStreak` triggers, not only at startup
-- [ ] **Scroll timeout** — add a maximum duration to `scrollToLoadAllCoupons` to prevent hangs if page height never stabilises
+_(none)_
 
 **Low priority**
 
@@ -220,6 +219,10 @@ Using `headless: true` would avoid this, but risks PAYBACK detecting the browser
 ---
 
 ## Change History
+
+### v1.4.0 — 2026-05-03
+- `feature` Mid-run session expiry detection — checks for login page when `noProgressStreak` or recovery fails, shows persistent toast
+- `feature` Scroll timeout — `scrollToLoadAllCoupons` aborts after 90s to prevent infinite hang
 
 ### v1.3.0 — 2026-05-03
 - `feature` Windows toast notifications — success (auto-dismiss) and errors (persistent alarm toast with OK button, stays until dismissed)
