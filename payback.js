@@ -12,6 +12,47 @@ const path = require('path');
     const screenshotDir = path.resolve('./screenshots');
     const lockFile = path.resolve('./payback.lock');
 
+    // --- Tuning parameters ---
+    const SAFETY_LIMIT                       = 500;
+    const NO_PROGRESS_STREAK_LIMIT           = 5;
+    const RATE_LIMIT_STREAK_LIMIT            = 3;
+    const MAX_RELOAD_ATTEMPTS                = 2;
+    const LOG_RETENTION_DAYS                 = 5;
+    const SCROLL_STABLE_ROUNDS_REQUIRED      = 3;
+    const MAX_SCROLL_ATTEMPTS                = 60;
+    const PERIODIC_PAUSE_EVERY_N_ACTIVATIONS = 20;
+
+    // --- Timing (milliseconds) ---
+    const RATE_LIMIT_BACKOFF_MS          = 90_000;
+    const PERIODIC_PAUSE_DURATION_MS     = 8_000;
+    const NAVIGATION_TIMEOUT_MS          = 30_000;
+    const PAGE_RELOAD_TIMEOUT_MS         = 30_000;
+    const BUTTON_CLICK_TIMEOUT_MS        = 5_000;
+    const DIALOG_CLOSE_TIMEOUT_MS        = 3_000;
+    const TOAST_TIMEOUT_MS               = 5_000;
+    const POST_NAVIGATION_DELAY_MS       = 3_000;
+    const POST_RELOAD_DELAY_MS           = 3_000;
+    const POST_CLICK_EXTENDED_DELAY_MS   = 4_000;
+    const POST_CLICK_DELAY_MS            = 2_500;
+    const DOM_DETACH_RECOVERY_DELAY_MS   = 2_000;
+    const PRE_RECOVERY_DELAY_MS          = 2_000;
+    const POST_PROGRESS_DELAY_MS         = 1_000;
+    const DIALOG_CLOSE_DELAY_MS          = 1_000;
+    const SCROLL_STEP_DELAY_MS           = 1_500;
+    const SCROLL_END_DELAY_MS            = 1_000;
+    const PRE_CLOSE_DELAY_MS             = 1_500;
+    const SCREENSHOT_RESTORE_DELAY_MS    = 300;
+
+    // --- Selectors ---
+    const SELECTOR_INACTIVE_BUTTON = 'button[data-testid$="-not_activated"]';
+    const SELECTOR_COUPON_HEADLINE = '[data-testid="not-activated-coupons-headline"]';
+    const SELECTOR_PARTNER_FILTER  = '[data-testid="coupons-partner-filter-select"]';
+
+    // --- URLs and text ---
+    const PAYBACK_COUPON_URL       = 'https://www.payback.de/coupons';
+    const TEXT_SERVICE_UNAVAILABLE = 'Dieser Service steht derzeit leider nicht zur Verfügung';
+    const ERROR_MSG_DOM_DETACH     = 'detached from the DOM';
+
     function ensureDirectoryExists(dirPath) {
         if (!fs.existsSync(dirPath)) {
             fs.mkdirSync(dirPath, { recursive: true });
@@ -23,7 +64,7 @@ const path = require('path');
             .filter(file => /^payback-\d{4}-\d{2}-\d{2}\.log$/.test(file))
             .sort()
             .reverse()
-            .slice(5);
+            .slice(LOG_RETENTION_DAYS);
         for (const file of oldFiles) {
             try { fs.unlinkSync(path.join(logDir, file)); } catch {}
         }
@@ -77,10 +118,10 @@ const path = require('path');
     /**
      * Shows a Windows notification.
      * - persistent=false: toast via PowerShell WinRT (auto-dismiss, stays in Action Center).
-     * - persistent=true: mshta msgbox dialog (stays on screen until the user clicks OK).
+     * - persistent=true: alarm toast with OK button (stays on screen until dismissed).
      * @param {string} title - Notification title.
      * @param {string} message - Notification body.
-     * @param {boolean} persistent - true = modal dialog (stays until dismissed).
+     * @param {boolean} persistent - true = alarm scenario (stays until dismissed).
      */
     function showWindowsToast(title, message, persistent = false) {
         const xmlEscape = str => str
@@ -109,7 +150,7 @@ $xml.LoadXml('${toastXml}')
         // spawn/detach does not work reliably on Windows — spawned processes are killed
         // when the parent Node process exits before they finish starting up.
         try {
-            execFileSync('powershell', ['-NonInteractive', '-EncodedCommand', encoded], { timeout: 5000 });
+            execFileSync('powershell', ['-NonInteractive', '-EncodedCommand', encoded], { timeout: TOAST_TIMEOUT_MS });
         } catch {
             // Non-fatal: notification failure must never abort the main script.
         }
@@ -137,7 +178,7 @@ $xml.LoadXml('${toastXml}')
         const file = path.join(screenshotDir, `${prefix}-${fileSafeTimestamp()}.png`);
         try {
             await setWindowState(page, 'normal');
-            await sleep(300);
+            await sleep(SCREENSHOT_RESTORE_DELAY_MS);
             await page.screenshot({ path: file, fullPage: true });
             log(`Screenshot saved: ${file}`);
         } catch (err) {
@@ -162,13 +203,13 @@ $xml.LoadXml('${toastXml}')
 
     async function isCouponPageLoaded(page) {
         const filterVisible = await page
-            .locator('[data-testid="coupons-partner-filter-select"]')
+            .locator(SELECTOR_PARTNER_FILTER)
             .first()
             .isVisible()
             .catch(() => false);
 
         const headlineVisible = await page
-            .locator('[data-testid="not-activated-coupons-headline"]')
+            .locator(SELECTOR_COUPON_HEADLINE)
             .first()
             .isVisible()
             .catch(() => false);
@@ -177,7 +218,7 @@ $xml.LoadXml('${toastXml}')
     }
 
     async function getInactiveCouponCount(page) {
-        const locator = page.locator('[data-testid="not-activated-coupons-headline"]').first();
+        const locator = page.locator(SELECTOR_COUPON_HEADLINE).first();
         const visible = await locator.isVisible().catch(() => false);
 
         if (!visible) {
@@ -191,7 +232,7 @@ $xml.LoadXml('${toastXml}')
     }
 
     async function getInactiveButtonCount(page) {
-        return await page.locator('button[data-testid$="-not_activated"]').count();
+        return await page.locator(SELECTOR_INACTIVE_BUTTON).count();
     }
 
     async function scrollToLoadAllCoupons(page) {
@@ -200,12 +241,11 @@ $xml.LoadXml('${toastXml}')
         let lastHeight = -1;
         let stableRounds = 0;
         let scrollAttempts = 0;
-        const maxScrollAttempts = 60; // 60 × 1.5s = 90s max
 
-        while (stableRounds < 3 && scrollAttempts < maxScrollAttempts) {
+        while (stableRounds < SCROLL_STABLE_ROUNDS_REQUIRED && scrollAttempts < MAX_SCROLL_ATTEMPTS) {
             scrollAttempts++;
             await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-            await sleep(1500);
+            await sleep(SCROLL_STEP_DELAY_MS);
 
             const newHeight = await page.evaluate(() => document.body.scrollHeight);
 
@@ -217,19 +257,19 @@ $xml.LoadXml('${toastXml}')
             }
         }
 
-        if (scrollAttempts >= maxScrollAttempts) {
-            log('Scroll timeout reached (90s). Proceeding with coupons loaded so far.');
+        if (scrollAttempts >= MAX_SCROLL_ATTEMPTS) {
+            log(`Scroll timeout reached (${MAX_SCROLL_ATTEMPTS * SCROLL_STEP_DELAY_MS / 1000}s). Proceeding with coupons loaded so far.`);
         }
 
         await page.evaluate(() => window.scrollTo(0, 0));
-        await sleep(1000);
+        await sleep(SCROLL_END_DELAY_MS);
 
         log('Scroll for lazy loading completed.');
     }
 
     async function isServiceUnavailableDialogOpen(page) {
         return await page
-            .getByText('Dieser Service steht derzeit leider nicht zur Verfügung', { exact: false })
+            .getByText(TEXT_SERVICE_UNAVAILABLE, { exact: false })
             .first()
             .isVisible()
             .catch(() => false);
@@ -244,8 +284,8 @@ $xml.LoadXml('${toastXml}')
         }
 
         try {
-            await closeButton.click({ timeout: 3000 });
-            await sleep(1000);
+            await closeButton.click({ timeout: DIALOG_CLOSE_TIMEOUT_MS });
+            await sleep(DIALOG_CLOSE_DELAY_MS);
             return true;
         } catch {
             return false;
@@ -254,8 +294,8 @@ $xml.LoadXml('${toastXml}')
 
     async function recoverPage(page) {
         log('Recovery: reloading page...');
-        await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
-        await sleep(3000);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: PAGE_RELOAD_TIMEOUT_MS });
+        await sleep(POST_RELOAD_DELAY_MS);
 
         if (await isOnLoginPage(page)) {
             log('Redirected to login page after reload. Session likely expired.');
@@ -279,7 +319,7 @@ $xml.LoadXml('${toastXml}')
         let reloadAttemptsForSameState = 0;
         let lastButtonCount = -1;
 
-        while (safetyCounter < 500) {
+        while (safetyCounter < SAFETY_LIMIT) {
             safetyCounter++;
 
             if (await isServiceUnavailableDialogOpen(page)) {
@@ -308,7 +348,7 @@ $xml.LoadXml('${toastXml}')
             }
             lastButtonCount = buttonsBefore;
 
-            if (noProgressStreak >= 5) {
+            if (noProgressStreak >= NO_PROGRESS_STREAK_LIMIT) {
                 if (await isOnLoginPage(page)) {
                     log('Session expired mid-run (detected via noProgressStreak). Please run with --login.');
                     showWindowsToast('Payback: Session abgelaufen', 'Session ist während des Laufs abgelaufen. Bitte mit --login neu einloggen.', true);
@@ -318,16 +358,16 @@ $xml.LoadXml('${toastXml}')
                 break;
             }
 
-            const button = page.locator('button[data-testid$="-not_activated"]').first();
+            const button = page.locator(SELECTOR_INACTIVE_BUTTON).first();
             let progressed = false;
             // Tracks a clean failure: click executed without error or service dialog, but coupon did not activate.
             // Used to detect PAYBACK-side rate limiting distinct from DOM/network errors.
             let cleanFailure = false;
 
             try {
-                await button.click({ timeout: 5000 });
+                await button.click({ timeout: BUTTON_CLICK_TIMEOUT_MS });
 
-                await sleep(2500);
+                await sleep(POST_CLICK_DELAY_MS);
 
                 if (await isServiceUnavailableDialogOpen(page)) {
                     log('Service unavailable dialog appeared after click. Aborting.');
@@ -348,7 +388,7 @@ $xml.LoadXml('${toastXml}')
                     reloadAttemptsForSameState = 0;
                     log(`Coupon activated: ${activated} (buttons ${buttonsBefore} -> ${buttonsAfter})`);
                 } else {
-                    await sleep(4000);
+                    await sleep(POST_CLICK_EXTENDED_DELAY_MS);
 
                     if (await isServiceUnavailableDialogOpen(page)) {
                         log('Service unavailable dialog appeared after wait. Aborting.');
@@ -375,8 +415,8 @@ $xml.LoadXml('${toastXml}')
             } catch (err) {
                 const msg = String(err.message || err);
 
-                if (msg.includes('detached from the DOM')) {
-                    await sleep(2000);
+                if (msg.includes(ERROR_MSG_DOM_DETACH)) {
+                    await sleep(DOM_DETACH_RECOVERY_DELAY_MS);
 
                     if (await isServiceUnavailableDialogOpen(page)) {
                         log('Service unavailable dialog appeared after DOM detach. Aborting.');
@@ -414,11 +454,11 @@ $xml.LoadXml('${toastXml}')
             }
 
             if (progressed) {
-                await sleep(1000);
+                await sleep(POST_PROGRESS_DELAY_MS);
 
-                if (activated > 0 && activated % 20 === 0) {
+                if (activated > 0 && activated % PERIODIC_PAUSE_EVERY_N_ACTIVATIONS === 0) {
                     log('Short pause to reduce load...');
-                    await sleep(8000);
+                    await sleep(PERIODIC_PAUSE_DURATION_MS);
                 }
 
                 continue;
@@ -426,9 +466,9 @@ $xml.LoadXml('${toastXml}')
 
             if (cleanFailure) {
                 rateLimitStreak++;
-                if (rateLimitStreak >= 3) {
-                    log('Rate limit suspected. Backing off for 90 seconds...');
-                    await sleep(90000);
+                if (rateLimitStreak >= RATE_LIMIT_STREAK_LIMIT) {
+                    log(`Rate limit suspected. Backing off for ${RATE_LIMIT_BACKOFF_MS / 1000} seconds...`);
+                    await sleep(RATE_LIMIT_BACKOFF_MS);
                     rateLimitStreak = 0;
                     noProgressStreak = 0;
                     continue;
@@ -437,12 +477,12 @@ $xml.LoadXml('${toastXml}')
 
             reloadAttemptsForSameState++;
 
-            if (reloadAttemptsForSameState > 2) {
+            if (reloadAttemptsForSameState > MAX_RELOAD_ATTEMPTS) {
                 log(`No progress after ${reloadAttemptsForSameState} reload attempts with ${buttonsBefore} remaining buttons. Aborting.`);
                 break;
             }
 
-            log(`No progress. Recovery reload ${reloadAttemptsForSameState}/2...`);
+            log(`No progress. Recovery reload ${reloadAttemptsForSameState}/${MAX_RELOAD_ATTEMPTS}...`);
 
             const recovered = await recoverPage(page);
             if (!recovered) {
@@ -455,10 +495,10 @@ $xml.LoadXml('${toastXml}')
                 break;
             }
 
-            await sleep(2000);
+            await sleep(PRE_RECOVERY_DELAY_MS);
         }
 
-        if (safetyCounter >= 500) {
+        if (safetyCounter >= SAFETY_LIMIT) {
             log('Safety limit reached. Aborting to prevent infinite loop.');
         }
 
@@ -496,13 +536,13 @@ $xml.LoadXml('${toastXml}')
         }
 
         log('Navigating to coupon page...');
-        await page.goto('https://www.payback.de/coupons', {
+        await page.goto(PAYBACK_COUPON_URL, {
             waitUntil: 'domcontentloaded',
-            timeout: 30000
+            timeout: NAVIGATION_TIMEOUT_MS
         });
         log(`Navigation complete. Current URL: ${page.url()}`);
 
-        await sleep(3000);
+        await sleep(POST_NAVIGATION_DELAY_MS);
 
         if (isLoginMode) {
             log('Login mode active. Please log in manually and then close the browser.');
@@ -574,7 +614,7 @@ $xml.LoadXml('${toastXml}')
             showWindowsToast('Payback', `${activated} Coupon(s) aktiviert.`);
         }
 
-        await sleep(1500);
+        await sleep(PRE_CLOSE_DELAY_MS);
         await context.close();
         log('Done');
     } catch (err) {

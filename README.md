@@ -204,6 +204,9 @@ _(none)_
 
 ## Change History
 
+### v1.7.0 — 2026-05-03
+- `feature` All magic numbers and strings extracted as named constants
+
 ### v1.6.0 — 2026-05-03
 - `feature` `run_hidden.vbs` now path-independent — derives project folder from its own location via `WScript.ScriptFullName`
 - `feature` `setup.ps1` creates Task Scheduler tasks without hardcoded paths
